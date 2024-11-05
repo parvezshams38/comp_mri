@@ -41,7 +41,7 @@ class Lab02_op:
             temp = fftshift(temp)
         else:
             temp = fftshift(x)
-            temp = fft2(temp)
+            temp = fft2(temp, norm = 'ortho')
             temp = fftshift(temp)
         return temp
 
@@ -67,7 +67,7 @@ class Lab02_op:
             temp = ifftshift(temp)
         else:
             temp = ifftshift(x)
-            temp = ifft2(temp)
+            temp = ifft2(temp,norm="ortho")
             temp = ifftshift(temp)
         return temp
 
@@ -126,7 +126,6 @@ class Lab02_op:
         n = kdata.shape[0]
         square_filter_2d = self.get_square_filter(kdata, mask_size)
         square_filter_1d = square_filter_2d[n//2]
-
         psf = np.abs(ifft2c(square_filter_1d))
 
         return psf
@@ -143,7 +142,8 @@ class Lab02_op:
         # Your code here ...
         max_amp = np.max(psf)
         half_max_amp = max_amp / 2
-        indices = np.where(psf > half_max_amp)
+        indices = np.where(psf >= half_max_amp)
+        print(indices)
         fwhm = np.max(indices)-np.min(indices)
         return fwhm
 
@@ -163,11 +163,11 @@ class Lab02_op:
         filter_h = window("hamming", (mask_size, mask_size))
 
         filter = np.zeros_like(kdata)
-        n = kdata.shape[0]
+        n, m = kdata.shape[0], kdata.shape[1]
         k, l = 0, 0
-        for i in range(n // 2 - mask_size // 2, n // 2 + mask_size // 2 ):
+        for i in range(n // 2 - mask_size // 2, n // 2 - mask_size // 2 + mask_size):
             l = 0
-            for j in range(n // 2 - mask_size // 2, n // 2 + mask_size // 2 ):
+            for j in range(m // 2 - mask_size // 2, m // 2 - mask_size // 2 + mask_size):
                 filter[i, j] = filter_h[k, l]
                 l += 1
             k += 1
@@ -225,6 +225,9 @@ class Lab02_op:
         return cropped_img
 
 
+    def calculate_energy(self, my_data):
+        return np.sum(np.abs(np.asarray(my_data))**2)
+
 if __name__ == "__main__":
     # %% Load modules
     # This import is necessary to run the code cell-by-cell
@@ -238,10 +241,52 @@ if __name__ == "__main__":
     my_img = op.ifft2c(kdata)
     my_kdata = op.fft2c(my_img)
 
-    for i in range(1000):
-        my_img = op.ifft2c(my_kdata)
-        my_kdata = op.fft2c(my_img)
+    """
+    energy_kdata = op.calculate_energy(kdata)
+    energy_im = op.calculate_energy(my_img)
+    energy_my_kdata = op.calculate_energy(my_kdata)
 
-    utils.imshow([my_kdata, my_img])
+    print(energy_im,energy_kdata, energy_my_kdata)
+
+    mag, phase = np.abs(my_img), np.angle(my_img)
+    utils.imshow([mag, phase],norm=1)
 
 
+    #checking square filters of different sizes and their effect
+    sqf1 = op.get_square_filter(kdata,64)
+    sqf2 = op.get_square_filter(kdata,128)
+    sqf3 = op.get_square_filter(kdata,256)
+
+    sq_filtered1 = op.filtering(kdata,sqf1)
+    sq_filtered2 = op.filtering(kdata,sqf2)
+    sq_filtered3 = op.filtering(kdata,sqf3)
+
+    reconstructed_im_sqf1 = op.ifft2c(sq_filtered1)
+    reconstructed_im_sqf2 = op.ifft2c(sq_filtered2)
+    reconstructed_im_sqf3 = op.ifft2c(sq_filtered3)
+
+    utils.imshow([sqf1, sqf2,sqf3])
+    utils.imshow([reconstructed_im_sqf1,reconstructed_im_sqf2,reconstructed_im_sqf3])
+    utils.imshow([op.ifft2c(sqf1), op.ifft2c(sqf2), op.ifft2c(sqf3)], norm =.3)
+    
+    
+
+    sq_filter_1d_1 = op.get_psf_1d_square(kdata, 64)
+    sq_filter_1d_2 = op.get_psf_1d_square(kdata, 128)
+    sq_filter_1d_3 = op.get_psf_1d_square(kdata, 256)
+    plt.plot(sq_filter_1d_1, color="blue")
+    plt.plot(sq_filter_1d_2,color="red")
+    plt.plot(sq_filter_1d_3,color="black")
+    plt.show()
+
+
+    a = np.array([0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,6,5,5,4,4,4,3,3,0,0,0,0])
+    print(op.get_fwhm(a))
+    plt.plot(a)
+    plt.show()
+    """
+
+    a = np.zeros([10,6])
+    b = op.get_hamming_filter(a, 4)
+    utils.imshow([b, window("hamming", (4, 4))])
+    
