@@ -143,7 +143,7 @@ class Lab02_op:
         max_amp = np.max(psf)
         half_max_amp = max_amp / 2
         indices = np.where(psf >= half_max_amp)
-        print(indices)
+        #print(indices)
         fwhm = np.max(indices)-np.min(indices)
         return fwhm
 
@@ -220,13 +220,56 @@ class Lab02_op:
         col_to_discard = m - m//os_factor                          #m-m/of________
         left = col_to_discard // 2
         right = left + m//os_factor
-        print(left, right)
+        #print(left, right)
         cropped_img = actual_image[:,left:right]
         return cropped_img
 
 
     def calculate_energy(self, my_data):
         return np.sum(np.abs(np.asarray(my_data))**2)
+    
+    def generate_3d_gaussian(self, my_size=64, center=None, sigma=10):
+        """
+        Generate a 3D Gaussian function centered in the volume
+        
+        Parameters:
+        size (int): Size of the cubic volume
+        center (tuple): Center coordinates (x,y,z). If None, uses volume center
+        sigma (float): Standard deviation of the Gaussian
+        
+        Returns:
+        ndarray: 3D volume with Gaussian pattern
+        """
+        if center is None:
+            center = (float(my_size)/2, float(my_size)/2, float(my_size)/2)
+        
+        x = np.linspace(0, my_size-1, my_size)
+        y = np.linspace(0, my_size-1, my_size)
+        z = np.linspace(0, my_size-1, my_size)
+        x, y, z = np.meshgrid(x, y, z)
+        
+        gaussian = np.exp(-((x - center[0])**2 + (y - center[1])**2 + 
+                        (z - center[2])**2) / (2*sigma**2))
+        return gaussian
+    
+    def generate_3d_sinusoid(self, size=64, frequency=(2,3,4)):
+        """
+        Generate a 3D sinusoidal pattern
+        
+        Parameters:
+        size (int): Size of the cubic volume
+        frequency (tuple): Frequency in x, y, z directions
+        
+        Returns:
+        ndarray: 3D volume with sinusoidal pattern
+        """
+        x = np.linspace(0, 2*np.pi, size)
+        y = np.linspace(0, 2*np.pi, size)
+        z = np.linspace(0, 2*np.pi, size)
+        x, y, z = np.meshgrid(x, y, z)
+        
+        sinusoid = np.sin(frequency[0]*x) * np.sin(frequency[1]*y) * np.sin(frequency[2]*z)
+        return sinusoid
 
 if __name__ == "__main__":
     # %% Load modules
@@ -238,8 +281,12 @@ if __name__ == "__main__":
     kdata = op.load_kdata()
     kdata_os = op.load_kdata_os()
 
-    my_img = op.ifft2c(kdata)
-    my_kdata = op.fft2c(my_img)
+    my_g = op.generate_3d_gaussian() * 0.7 + op.generate_3d_sinusoid() * 0.3
+    mm = op.fft2c(my_g)
+    #utils.imshow([ mm[i] for i in range(9)],num_rows=3, norm=0.3)
+
+    im = op.ifft2c(mm)
+    utils.imshow([im[1],im[5]])
 
     """
     energy_kdata = op.calculate_energy(kdata)
@@ -250,7 +297,6 @@ if __name__ == "__main__":
 
     mag, phase = np.abs(my_img), np.angle(my_img)
     utils.imshow([mag, phase],norm=1)
-
 
     #checking square filters of different sizes and their effect
     sqf1 = op.get_square_filter(kdata,64)
@@ -267,9 +313,7 @@ if __name__ == "__main__":
 
     utils.imshow([sqf1, sqf2,sqf3])
     utils.imshow([reconstructed_im_sqf1,reconstructed_im_sqf2,reconstructed_im_sqf3])
-    utils.imshow([op.ifft2c(sqf1), op.ifft2c(sqf2), op.ifft2c(sqf3)], norm =.3)
-    
-    
+    utils.imshow([op.ifft2c(sqf1), op.ifft2c(sqf2), op.ifft2c(sqf3)], norm =.3)   
 
     sq_filter_1d_1 = op.get_psf_1d_square(kdata, 64)
     sq_filter_1d_2 = op.get_psf_1d_square(kdata, 128)
@@ -277,16 +321,41 @@ if __name__ == "__main__":
     plt.plot(sq_filter_1d_1, color="blue")
     plt.plot(sq_filter_1d_2,color="red")
     plt.plot(sq_filter_1d_3,color="black")
-    plt.show()
+    plt.show()    
 
+    my_sq_im1 = op.filtering(kdata, op.get_square_filter(kdata,64))
+    my_ham_im1 = op.filtering(kdata, op.get_hamming_filter(kdata,64))
+    sq_im1 = op.ifft2c(my_sq_im1)
+    ham_im1 = op.ifft2c(my_ham_im1)
 
-    a = np.array([0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,6,5,5,4,4,4,3,3,0,0,0,0])
-    print(op.get_fwhm(a))
-    plt.plot(a)
-    plt.show()
+    my_sq_im2 = op.filtering(kdata, op.get_square_filter(kdata,128))
+    my_ham_im2 = op.filtering(kdata, op.get_hamming_filter(kdata,128))
+    sq_im2 = op.ifft2c(my_sq_im2)
+    ham_im2 = op.ifft2c(my_ham_im2)
+
+    my_sq_im3 = op.filtering(kdata, op.get_square_filter(kdata,256))
+    my_ham_im3 = op.filtering(kdata, op.get_hamming_filter(kdata,256))
+    sq_im3 = op.ifft2c(my_sq_im3)
+    ham_im3 = op.ifft2c(my_ham_im3)
+    im = op.ifft2c(kdata)
+    utils.imshow([sq_im1, sq_im2, sq_im2, ham_im1, ham_im2,ham_im3,im,im,im],num_rows=3)
+
+    sq_filter_1d_1 = op.get_psf_1d_square(kdata, 64)
+    sq_filter_1d_2 = op.get_psf_1d_square(kdata, 128)
+    sq_filter_1d_3 = op.get_psf_1d_square(kdata, 256)
+    plt.plot(sq_filter_1d_1)
+    plt.plot(sq_filter_1d_2,color="gray")
+    plt.plot(sq_filter_1d_3,color="orange")
+
+    ham_filter_1d_1 = op.get_psf_1d_hamming(kdata, 64)
+    ham_filter_1d_2 = op.get_psf_1d_hamming(kdata, 128)
+    ham_filter_1d_3 = op.get_psf_1d_hamming(kdata, 256)
+    plt.plot(ham_filter_1d_1, color="blue")
+    plt.plot(ham_filter_1d_2,color="red")
+    plt.plot(ham_filter_1d_3,color="black")
+    #plt.show()
+
+    print(op.get_fwhm(sq_filter_1d_1),op.get_fwhm(sq_filter_1d_2),op.get_fwhm(sq_filter_1d_3))
+    print(op.get_fwhm(ham_filter_1d_1), op.get_fwhm(ham_filter_1d_2), op.get_fwhm(ham_filter_1d_3))
+
     """
-
-    a = np.zeros([10,6])
-    b = op.get_hamming_filter(a, 4)
-    utils.imshow([b, window("hamming", (4, 4))])
-    
