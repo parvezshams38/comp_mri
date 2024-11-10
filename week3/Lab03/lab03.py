@@ -140,8 +140,16 @@ class Lab03_op:
         get_window = kwargs.get("get_window", self.get_window)
 
         # Your code here ...
+        N,M = np.shape(kdata)
+        kdata_squared_window = np.zeros([N,N],dtype=complex)
+        kdata_squared_window[:,0:M] = kdata
 
-        I = None
+        kdata_filtered_squared = kdata_squared_window * get_window(kdata, wtype)
+        kdata_im = ifftshift(ifft2(fftshift(kdata_filtered_squared), norm="ortho"))
+        
+        estimated_phase = estim_phs(kdata)
+        estimated_image = kdata_im * np.exp(-(1j)*estimated_phase)
+        I = np.real(estimated_image)
 
         return I
 
@@ -161,8 +169,15 @@ class Lab03_op:
         estim_phs = kwargs.get("estim_phs", self.estim_phs)
 
         # Your code here ...
+        estimated_phase = estim_phs(kdata)        
+        N,M = np.shape(kdata)
+        kdata_squared_window = np.zeros([N,N],dtype=complex)
 
-        I = None
+        for _ in range(Nite):
+            kdata_squared_window[:,0:M] = kdata
+            kdata_im = utils.ifft2c(kdata_squared_window)
+            I = np.abs(kdata_im) * np.exp(1j*estimated_phase)
+            kdata_squared_window = utils.fft2c(I)
 
         return I
 
@@ -181,12 +196,27 @@ if __name__ == "__main__":
     half_data = op.get_half_zf_kdata(kdata)
     half_her = op.hermitian_symmetry(half_data)
     full_kdata = op.load_kdata_full()
-
-    a = np.random.random([32,22])
-    f_h = op.get_window(a, "hamming")
-    f_r = op.get_window(a)
-    utils.imshow([f_h,f_r])
-
-
     
-    
+    orginial_im = utils.normalization(utils.ifft2c(full_kdata))
+    im_ramp = utils.normalization(op.pf_margosian(kdata, "ramp"))
+    im_ham = utils.normalization(op.pf_margosian(kdata, "hamming"))
+    im_pocs = utils.normalization(op.pf_pocs(kdata, 8))
+
+    #utils.imshow([orginial_im-orginial_im,im_ramp-orginial_im,im_ham-orginial_im,im_pocs-orginial_im],num_rows=2,norm=.5)
+
+    er_ramp = orginial_im-im_ramp
+    er_ham = orginial_im-im_ham
+    er_pocs = orginial_im-im_pocs
+
+    e1 = np.sum(np.abs(er_ramp)*np.abs(er_ramp))
+    e2 = np.sum(np.abs(er_ham)*np.abs(er_ham))
+    e3 = np.sum(np.abs(er_pocs)*np.abs(er_pocs))
+
+    print(e1,e2,e3)
+
+
+    snr1 = np.mean(np.abs(er_ramp))/np.std(np.abs(er_ramp))
+    snr2 = np.mean(np.abs(er_ham))/np.std(np.abs(er_ham))
+    snr3 = np.mean(np.abs(er_pocs))/np.std(np.abs(er_pocs))
+
+    print(np.abs(snr1),np.abs(snr2),np.abs(snr3))
