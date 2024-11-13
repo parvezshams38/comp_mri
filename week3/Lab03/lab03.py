@@ -4,13 +4,9 @@ Computational Magnetic Resonance Imaging (CMRI) 2024/2025 Winter semester
 - Author          : Jinho Kim
 - Email           : <jinho.kim@fau.de>
 """
-
 import numpy as np
 import utils
 from skimage.filters import window
-from numpy.fft import fft2, fftshift, ifft2, ifftshift
-import matplotlib.pyplot as plt
-
 
 class Lab03_op:
     def __init__(self, PF):
@@ -27,7 +23,6 @@ class Lab03_op:
     def load_kdata_full(self):
         mat = utils.load_data("kdata1.mat")
         return mat["kdata1"]
-
     
     def get_half_zf_kdata(self, kdata: np.ndarray):
         """
@@ -39,11 +34,9 @@ class Lab03_op:
             zf_kdata:       Half zero-filled kdata. (shape of [N, N])
         """
         # Your code here ...
-        N,M = np.shape(kdata)[0], np.shape(kdata)[1]
-        temp = np.zeros([N, N], dtype=complex)
-        temp[:,0:N//2] = kdata[:,0:N//2]
-
-        zf_kdata = temp
+        N,M = np.shape(kdata)
+        zf_kdata = np.zeros([N, N], dtype=complex)
+        zf_kdata[:,0:N//2] = kdata[:,0:N//2]
         return zf_kdata
 
     def hermitian_symmetry(self, zf_kdata: np.ndarray):
@@ -63,7 +56,7 @@ class Lab03_op:
                 if j < N//2:
                     hm_kdata[i,j] = zf_kdata[i,j]
                 else:
-                    hm_kdata[i,j] = np.conjugate(zf_kdata[N-i-1, N-j-1])
+                    hm_kdata[i,j] = np.conjugate(zf_kdata[N-i-1, N-j-1]) # (0,2)->(2,0) (1,2)->
         
         return hm_kdata
 
@@ -87,7 +80,7 @@ class Lab03_op:
                 temp [i,j] = kdata [i,j] * f [i,k]
                 k += 1
 
-        estimated_phase = np.angle(np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(temp))))
+        estimated_phase = np.angle(utils.ifft2c(temp))
         return estimated_phase
 
     def get_window(self, kdata, type="ramp"):
@@ -102,26 +95,23 @@ class Lab03_op:
         """
         # Your code here ...
         N, M = np.shape(kdata)
+        window_filter = np.zeros([N,N])
+        window_filter[:,0:N-M] = 1
         width = 2 * M - N
-        if type == "hamming":
-            window_1d = window("hamming", shape=(width,width))
-            window_1d = window_1d[width//2,:]
-            window_1d = np.reshape(window_1d,(1,width))
+        if type != "ramp":
+            window_1d = window("hamming", shape=(width*2,width*2))
+            window_1d = window_1d[width,:]
+            window_1d = np.reshape(window_1d,(1,width*2))
             window_2d = np.dot(np.ones([N,1]),window_1d)
             window_2d /= np.max(window_2d)
+            window_filter[:,N-M:M] = window_2d[:,width:2*width]
         else:
             window_1d = np.linspace(1, 0, width)
             window_1d = np.reshape(window_1d,(1,width))
             window_2d = np.dot(np.ones([N,1]),window_1d)
             window_2d /= np.max(window_2d)
-
-        window_filter = np.zeros([N,N])
-        window_filter[:,N-M:M] = window_2d
-        if type == "hamming":
-            window_filter[:,0:N//2] = 1
-        else:
-            window_filter[:,0:N-M] = 1
-        
+            window_filter[:,N-M:M] = window_2d
+                  
         return window_filter
 
     def pf_margosian(self, kdata, wtype, **kwargs):
@@ -145,7 +135,7 @@ class Lab03_op:
         kdata_squared_window[:,0:M] = kdata
 
         kdata_filtered_squared = kdata_squared_window * get_window(kdata, wtype)
-        kdata_im = ifftshift(ifft2(fftshift(kdata_filtered_squared), norm="ortho"))
+        kdata_im = utils.ifft2c(kdata_filtered_squared)
         
         estimated_phase = estim_phs(kdata)
         estimated_image = kdata_im * np.exp(-(1j)*estimated_phase)
@@ -179,7 +169,7 @@ class Lab03_op:
             I = np.abs(kdata_im) * np.exp(1j*estimated_phase)
             kdata_squared_window = utils.fft2c(I)
 
-        return I
+        return np.abs(I)
 
 
 if __name__ == "__main__":
@@ -197,10 +187,20 @@ if __name__ == "__main__":
     half_her = op.hermitian_symmetry(half_data)
     full_kdata = op.load_kdata_full()
     
+
     orginial_im = utils.normalization(utils.ifft2c(full_kdata))
+    
+    
     im_ramp = utils.normalization(op.pf_margosian(kdata, "ramp"))
     im_ham = utils.normalization(op.pf_margosian(kdata, "hamming"))
     im_pocs = utils.normalization(op.pf_pocs(kdata, 8))
+
+    utils.imshow([orginial_im,im_pocs])
+
+    """
+    print(np.isreal(im_pocs))
+
+    utils.imshow([orginial_im,im_ramp,im_ham])
 
     #utils.imshow([orginial_im-orginial_im,im_ramp-orginial_im,im_ham-orginial_im,im_pocs-orginial_im],num_rows=2,norm=.5)
 
@@ -220,3 +220,4 @@ if __name__ == "__main__":
     snr3 = np.mean(np.abs(er_pocs))/np.std(np.abs(er_pocs))
 
     print(np.abs(snr1),np.abs(snr2),np.abs(snr3))
+    """
