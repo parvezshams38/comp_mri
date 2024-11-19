@@ -13,6 +13,8 @@ import torchkbnufft as tkbn
 import utils
 from grid import grid
 
+import matplotlib.pyplot as plt
+
 
 class Lab04_op:
 
@@ -43,9 +45,9 @@ class Lab04_op:
         traj = np.zeros_like(k_radial).astype(complex)
         mag = np.linspace(-0.5,0.5,m)
         for i in range(m):
-            for j in range(n):
-                ang = self.PI/2+j*self.GA
-                traj[i,j] = mag[i]*np.exp(1j*ang)
+            for k in range(n):
+                ang = self.PI/2+k*self.GA
+                traj[i,k] = mag[i]*np.exp(1j*ang)
         
         return traj
 
@@ -119,10 +121,10 @@ class Lab04_op:
         # Your code here ...
         n,m = np.shape(k_radial)
         ramp = np.reshape(get_ramp(k_radial),(n,))
-        
+        k_radial_temp = np.copy(k_radial)
         for j in range(m):
-            k_radial[:,j] *= ramp
-        k_cart_ds = grid(k_radial,traj,n)
+            k_radial_temp[:,j] *= ramp
+        k_cart_ds = grid(k_radial_temp,traj,n)
 
         return k_cart_ds
 
@@ -143,8 +145,13 @@ class Lab04_op:
         get_ramp = kwargs.get("get_ramp", self.get_ramp)
 
         # Your code here ...
+        r,s = np.shape(k_radial)
+        ramp = np.reshape(get_ramp(k_radial),(r,))
+        k_radial_temp = np.copy(k_radial)
+        for i in range(s):
+            k_radial_temp[:,i] *= ramp 
 
-        k_cart_ds_os = None
+        k_cart_ds_os = grid(k_radial_temp,traj,r*os_rate)
 
         return k_cart_ds_os
 
@@ -160,8 +167,10 @@ class Lab04_op:
             image_crop (np.ndarray):        cropped image (shape of target_shape)
         """
         # Your code here ...
+        os_r = np.shape(ov_image)[0]
+        m,n = target_shape
 
-        image_crop = None
+        image_crop = ov_image[(os_r-m)//2:(os_r-m)//2+m, (os_r-n)//2:(os_r-n)//2+n]
 
         return image_crop
 
@@ -180,8 +189,12 @@ class Lab04_op:
             c:                          deapodization factor c(x,y) (shape of [Oversampled_Readout, Oversampled_Readout])
         """
         # Your code here ...
-        c = None
+        r,s = np.shape(k_radial)
+        delta = np.zeros([r,s])
+        delta[r//2,s//2] = 1
 
+        delta_response = grid(delta,traj,r*os_rate)
+        c = utils.ifft2c(delta_response)
         return c
 
     def deapodization(self, k_radial, traj, os_rate, **kwargs):
@@ -207,12 +220,14 @@ class Lab04_op:
         decimate2d = kwargs.get("decimate2d", self.decimate2d)
         get_c = kwargs.get("get_c", self.get_c)
 
-        a = 1
+        a = .001
 
         # Your code here ...
-
-        deapod_recon = None
-
+        c = get_c(k_radial,traj,os_rate)
+        apodized_oversampled_kdata = grid_radial_ds_os(k_radial,traj,os_rate)
+        apodized_oversampled_image_data = utils.ifft2c(apodized_oversampled_kdata)
+        oversampled_image_data = apodized_oversampled_image_data / (c + a*np.ones_like(c))
+        deapod_recon = decimate2d(oversampled_image_data,(np.shape(k_radial)[0],np.shape(k_radial)[0]))
         return deapod_recon
 
     def nufft_traj(self, k_radial):
@@ -229,8 +244,15 @@ class Lab04_op:
         """
         # Your code here ...
 
-        ktraj = None
+        spokelength, nspokes = k_radial.shape
+        angles = np.arange(nspokes) * self.GA  # Golden angle increments
 
+        # Create trajectory as (kx, ky)
+        ky = np.linspace(-np.pi, np.pi, spokelength)[:, None] * np.cos(angles)  # Y component
+        kx = np.linspace(-np.pi, np.pi, spokelength)[:, None] * (-np.sin(angles))  # X component
+
+        # Stack and reshape to (2, total_points)
+        ktraj = np.stack((kx.flatten(), ky.flatten()), axis=0)
         return ktraj
 
     def nufft_kdata(self, k_radial, **kwargs):
@@ -249,10 +271,11 @@ class Lab04_op:
         get_ramp = kwargs.get("get_ramp", self.get_ramp)
 
         # Your code here ...
+        k_image = get_ramp(k_radial) * k_radial
+        k_image = k_image.flatten()
+        nufft_kdata = np.reshape(k_image,(1,1,-1))
 
-        nufft_kdata = None
-
-        return nufft_kdata
+        return torch.tensor(nufft_kdata, dtype=torch.complex64, device=self.device)
 
     def nufft_recon(self, k_radial, im_size: Tuple[int, int], **kwargs):
         """
@@ -274,9 +297,13 @@ class Lab04_op:
 
         # Your code here ...
 
-        nufft_recon = None
+        ktraj = torch.tensor(nufft_traj(k_radial), dtype=torch.float32, device=self.device)
+        kdata = nufft_kdata(k_radial)
 
-        return nufft_recon
+        adjoint_nufft = tkbn.KbNufftAdjoint(im_size=im_size).to(self.device)
+        nufft_recon = adjoint_nufft(kdata, ktraj)
+        
+        return nufft_recon.cpu().numpy()[0][0]
 
 
 if __name__ == "__main__":
@@ -288,16 +315,22 @@ if __name__ == "__main__":
     op = Lab04_op()
     k_radial = op.load_kdata()
     #utils.imshow([k_radial], norm=0.3)
-    print(np.shape(k_radial))
-    print(op.calc_nyquist(k_radial))
+    #print(np.shape(k_radial))
+    #print(op.calc_nyquist(k_radial))
 
+    k_cart_ds_os_recon_deapod_cropped = op.deapodization(k_radial,op.get_traj(k_radial),2)
 
-    traj = op.get_traj(k_radial)
-    k_cart = op.grid_radial(k_radial, traj)
-    k_cart_recon = utils.ifft2c(k_cart)
-
-    k_cart_ds = op.grid_radial_ds(k_radial, traj)
-    k_cart_ds_recon = utils.ifft2c(k_cart_ds)
-
-    utils.imshow([k_cart_ds], titles=["Grided kspace density compensated"], norm=0.2)
-    utils.imshow([k_cart_ds_recon], titles=["Grided kspace density compensated recon"], norm=0.7)
+    nufft_recon = op.nufft_recon(k_radial, (k_radial.shape[0], k_radial.shape[0]))
+    utils.imshow(
+        [
+            k_cart_ds_os_recon_deapod_cropped,
+            nufft_recon,
+        ],
+        titles=[
+            "De-apodization",
+            "NUFFT",
+        ],
+        num_rows=1,
+        pos=[1, 1],
+        norm=0.6,
+    ) 
