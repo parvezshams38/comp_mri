@@ -220,7 +220,7 @@ class Lab04_op:
         decimate2d = kwargs.get("decimate2d", self.decimate2d)
         get_c = kwargs.get("get_c", self.get_c)
 
-        a = .001
+        a = 1
 
         # Your code here ...
         c = get_c(k_radial,traj,os_rate)
@@ -245,13 +245,12 @@ class Lab04_op:
         # Your code here ...
 
         spokelength, nspokes = k_radial.shape
-        angles = np.arange(nspokes) * self.GA  # Golden angle increments
+        angles = np.arange(nspokes) * self.GA 
 
-        # Create trajectory as (kx, ky)
+  
         ky = np.linspace(-np.pi, np.pi, spokelength)[:, None] * np.cos(angles)  # Y component
         kx = np.linspace(-np.pi, np.pi, spokelength)[:, None] * (-np.sin(angles))  # X component
 
-        # Stack and reshape to (2, total_points)
         ktraj = np.stack((kx.flatten(), ky.flatten()), axis=0)
         return ktraj
 
@@ -318,7 +317,11 @@ if __name__ == "__main__":
     #print(np.shape(k_radial))
     #print(op.calc_nyquist(k_radial))
 
+    traj = op.get_traj(k_radial)
+    #utils.plot_spokes(traj, 10)
+
     k_cart_ds_os_recon_deapod_cropped = op.deapodization(k_radial,op.get_traj(k_radial),2)
+    utils.imshow([k_cart_ds_os_recon_deapod_cropped])
 
     nufft_recon = op.nufft_recon(k_radial, (k_radial.shape[0], k_radial.shape[0]))
     utils.imshow(
