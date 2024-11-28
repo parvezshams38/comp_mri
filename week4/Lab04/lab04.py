@@ -318,7 +318,7 @@ if __name__ == "__main__":
     #print(op.calc_nyquist(k_radial))
 
     traj = op.get_traj(k_radial)
-    #utils.plot_spokes(traj, 10)
+    utils.plot_spokes(traj, 1)
 
     k_cart_ds_os_recon_deapod_cropped = op.deapodization(k_radial,op.get_traj(k_radial),2)
     utils.imshow([k_cart_ds_os_recon_deapod_cropped])
