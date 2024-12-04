@@ -72,7 +72,7 @@ class Lab05_op:
         coil_comb_img = temp
         return coil_comb_img
 
-    def get_psi(self, noise_maps: np.ndarray) -> np.ndarray:
+    def get_psi(self, noise_maps: np.ndarray) -> np.ndarray: ################################ OK 
         """
         This function calculates the noise covariance matrix
         Use np.cov function to calculate the covariance matrix.
@@ -98,7 +98,7 @@ class Lab05_op:
         return psi
 
 
-    def apply_psi(self, x: np.ndarray, psi: np.ndarray) -> np.ndarray:
+    def apply_psi(self, x: np.ndarray, psi: np.ndarray) -> np.ndarray: ################################# OK
         """
         This function applies the coil noise covariance matrix to the image
         \Psi^{-1/2}x
@@ -289,6 +289,12 @@ if __name__ == "__main__":
     # %%
     op = Lab05_op()
     kdata, sens_maps, noise_maps = op.load_data()
+    print(np.shape(kdata),np.shape(sens_maps),np.shape(noise_maps))
+    PE,RO,nC = np.shape(kdata)
+    kdata = kdata[:,10:250,:]
+    sens_maps = sens_maps[:,10:250,:]
+    
+    print(np.shape(kdata),np.shape(sens_maps),np.shape(noise_maps))
     psi = op.get_psi(noise_maps)
     aliased_img = utils.ifft2c(kdata[::2], axes=(0, 1))
     
