@@ -383,7 +383,7 @@ class Lab06_op:
 
         # Your code here ...
         kernel_h, kernel_w = kernel_size
-        pad_up, pad_left = self.get_pad_PE_up(kernel_h, R), self.get_pad_RO_left(kernel_w)
+        pad_up, pad_left = get_pad_PE_up(kernel_h, R), get_pad_RO_left(kernel_w)
         resized_output = padded_input_k[pad_up : pad_up + self.PE, pad_left : pad_left + self.RO]
         return resized_output
 
