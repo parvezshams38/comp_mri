@@ -48,7 +48,7 @@ class Lab07_op:
             nufft_ob:           NUFFT operator
         """
         # Your code here ...
-        nufft_ob = None
+        nufft_ob = tkbn.KbNufft(im_size=im_size,grid_size=grid_size,device=self.device)
         return nufft_ob
 
     def get_nufft_adj_ob(self, im_size: Tuple[int, int], grid_size: Tuple[int, int]) -> tkbn.KbNufftAdjoint:
@@ -66,9 +66,9 @@ class Lab07_op:
             nufft_adj_ob:       Adjoint NUFFT operator
         """
         # Your code here ...
-        nufft_adj_ob = None
+        nufft_adj_ob = tkbn.KbNufftAdjoint(im_size=im_size,grid_size=grid_size,device=self.device)
         return nufft_adj_ob
-
+    
     def get_nufft_kdata(self, kdata: np.ndarray, dc_weights: Optional[np.ndarray] = None) -> torch.Tensor:
         """
         This method converts the k-space data to the format that NUFFT operator can use.
@@ -84,11 +84,17 @@ class Lab07_op:
         kdata_nufft = kdata.copy()
 
         # Your code here ...
+        n_ro, n_spokes, n_channel = np.shape(kdata)
+        kdata_nufft_temp = np.zeros([1,n_channel,n_ro*n_spokes],dtype=complex)
+
         if dc_weights is not None:
-            kdata_nufft = None
+            for i in range(n_channel):
+                kdata_nufft[:,:,i] *= dc_weights 
 
-        kdata_nufft = None
+        for i in range(n_channel):
+            kdata_nufft_temp[0,i,:] = np.reshape(kdata_nufft[:,:,i],(1,n_ro*n_spokes))        
 
+        kdata_nufft = torch.tensor(kdata_nufft_temp,dtype=torch.complex128, device=self.device)  ########################complex128
         return kdata_nufft
 
     def get_nufft_traj(self, traj: np.ndarray) -> torch.Tensor:
@@ -106,11 +112,14 @@ class Lab07_op:
         # Your code here ...
 
         # To make the range of traj to [-PI ~ PI]
-        traj_nufft = None
-        traj_stack = None
+        r, s = np.shape(traj)
+        traj_nufft = traj * 2* self.PI
+        real = np.real(np.reshape(traj_nufft,(1,r*s)))
+        imag = np.imag(np.reshape(traj_nufft,(1,r*s)))
+        traj_stack = np.stack((real.flatten(),imag.flatten()),axis=0)
 
-        return traj_stack
-
+        return torch.tensor(traj_stack, dtype=torch.float32, device=self.device) #########################complex128
+    
     def get_nufft_sens_maps(self, sens_maps: np.ndarray) -> torch.Tensor:
         """
         This method converts the sensitivity maps to the format that NUFFT operator can use.
@@ -123,9 +132,13 @@ class Lab07_op:
             sens_maps_nufft: Sensitivity maps of the k-space data in the format that NUFFT operator can use. (shape of [Batch(1), Channels, Readout // 2, Readout // 2])
         """
         # Your code here ...
-        sens_maps_nufft = None
+        m,n,n_channel = np.shape(sens_maps)
+        sens_maps_nufft = np.zeros([1,n_channel,m,n],dtype=complex)
+        for i in range(n_channel):
+            sens_maps_nufft[:,i,:,:] = sens_maps[:,:,i]
 
-        return sens_maps_nufft
+        return torch.tensor(sens_maps_nufft,dtype=torch.complex128,device=self.device)
+    
 
     def nufft_recon(
         self,
@@ -156,19 +169,19 @@ class Lab07_op:
         get_nufft_kdata = kwargs.get("get_nufft_kdata", self.get_nufft_kdata)
 
         # Your code here ...
-        im_size = None
-        grid_size = None
+        im_size = np.shape(sens_maps[:,:,0])
+        grid_size = [np.shape(kdata)[0], np.shape(kdata)[0]]
 
-        nufft_adj_ob = None
+        nufft_adj_ob = get_nufft_adj_ob(im_size,grid_size)
 
-        nufft_kdata = None
-        nufft_traj = None
-        nufft_sm = None
+        nufft_kdata = get_nufft_kdata(kdata=kdata,dc_weights=dc_weights)
+        nufft_traj = get_nufft_traj(traj)
+        nufft_sm = get_nufft_sens_maps(sens_maps)
 
         # Reconstruction
-        recon_NUFFT = None
-
-        return recon_NUFFT
+        recon_NUFFT_temp = nufft_adj_ob(data=nufft_kdata,omega=nufft_traj,smaps=nufft_sm,norm="ortho")
+        return np.abs(recon_NUFFT_temp.squeeze().cpu().numpy()) 
+    
 
     def calc_grad(
         self,
@@ -195,10 +208,11 @@ class Lab07_op:
             grad: Gradient of the objective function for the NUFFT operator. (shape of [Batch(1), Channels, Readout // 2, Readout // 2])
         """
         # Your code here ...
-        grad = None
+        t1 = nufft_ob(u,nufft_traj,smaps=nufft_sm,norm="ortho") - g
+        grad = 2 * nufft_adj_ob(t1,nufft_traj,smaps=nufft_sm,norm="ortho")
 
         return grad
-
+    
     def nufft_gd_recon(
         self,
         gt: np.ndarray,
@@ -239,22 +253,22 @@ class Lab07_op:
         im_size = (N_ro // 2, N_ro // 2)
         grid_size = (N_ro, N_ro)
 
-        nufft_ob = None
-        nufft_adj_ob = None
+        nufft_ob = get_nufft_ob(im_size,grid_size)
+        nufft_adj_ob = get_nufft_adj_ob(im_size,grid_size)
 
-        nufft_traj = None
-        nufft_sm = None
+        nufft_traj = get_nufft_traj(traj)
+        nufft_sm = get_nufft_sens_maps(sens_maps)
 
-        u = None
-        g = None
+        u = torch.tensor(np.zeros([1,1,im_size[0],im_size[1]]),dtype=torch.complex128,device=self.device)
+        g = get_nufft_kdata(kdata)
 
         nmse_gd = []
         grad_norms = []
         recons_gd = []
         with tqdm(total=iter, unit="iter", leave=True) as pbar:
             for ii in range(iter):
-                grad = None
-                u = None
+                grad = calc_grad(nufft_ob,nufft_adj_ob,nufft_traj,nufft_sm,u,g)
+                u = u - step_size * grad
 
                 grad_norm = torch.norm(grad).cpu().numpy()
                 abs_u = np.abs(u.squeeze().cpu().numpy())
@@ -267,7 +281,7 @@ class Lab07_op:
                 recons_gd.append(abs_u)
 
         return recons_gd, nmse_gd, grad_norms
-
+    
     def nufft_cg(
         self,
         nufft_ob: NUFFT_Forward_OP,
@@ -302,23 +316,24 @@ class Lab07_op:
             nmse: Normalized mean squared error of the reconstructed images at each iteration. (shape of [iter])
         """
         # Your code here ...
-        x = None
-        r = None
-        p = None
-        rt_r = None
+        x = torch.tensor(np.zeros([1,1,im_size[0],im_size[1]]),dtype=torch.complex128,device=self.device)
+        r = nufft_adj_ob(nufft_kdata,nufft_traj,smaps=nufft_sm,norm="ortho")-nufft_adj_ob(nufft_ob(x,nufft_traj,smaps=nufft_sm,norm="ortho"),nufft_traj,smaps=nufft_sm,norm="ortho")
+        p = r.clone()
+        rt_r = utils.my_dot(r,r)   #######################################################################
 
         gifs, nmse = [], []
         with tqdm(total=iter, unit="iter", leave=True) as pbar:
             for ii in range(iter):
-                Ap = None
-                alpha = None
-                x = None
-                r = None
+                Ap = nufft_adj_ob(nufft_ob(p,nufft_traj,smaps=nufft_sm,norm="ortho"),nufft_traj,smaps=nufft_sm,norm="ortho")
+                alpha = rt_r / utils.my_dot(p,Ap)
+                x = x + alpha * p
+                r = r - alpha*Ap
+                rt_r_new = utils.my_dot(r,r)
                 if torch.sqrt(rt_r_new) < tol:
                     break
-                rt_r_new = None
-                beta = None
-                p = None
+                
+                beta = rt_r_new / rt_r
+                p = r + beta*p 
 
                 # update rt_r for the next iteration
                 rt_r = rt_r_new
@@ -333,7 +348,7 @@ class Lab07_op:
                     nmse.append(utils.calc_nmse(abs(gt), x_np))
 
         return x_np, gifs, nmse
-
+    
     def cg_sense(
         self,
         kdata: np.ndarray,
@@ -407,3 +422,17 @@ if __name__ == "__main__":
     # %%
     op = Lab07_op()
     kdata, sens_maps, traj, dc_weights, gt = op.load_data()
+
+    recon_NUFFT = op.nufft_recon(kdata, traj, sens_maps, dc_weights)
+    recons_gd2, nmse_gd2, grad_norm2 = op.nufft_gd_recon(gt, kdata, traj, sens_maps, iter=100)
+    recons_gd, nmse_gd, grad_norm = op.nufft_gd_recon(gt, kdata, traj, sens_maps, iter=50)
+
+    tol = 1e-4
+    maxit = 100
+    recon_cg, nmse_cg = op.cg_sense(
+        kdata,
+        traj,
+        sens_maps,
+        gt=gt,
+        # title=f"3_2-CG-SENSE(iter={maxit})",
+    )

@@ -261,7 +261,7 @@ def create_gif(recons: list, title: str, duration: int = 100):
         recon = recon / recon.max() * 255  # Rescaling between 0-255
         tmp_img = Image.fromarray(recon).convert("L")
         tmp_img = tmp_img.resize(tuple(i * 2 for i in recon.shape))  # double the size
-        font = ImageFont.truetype("DejaVuSans.ttf", size=30)  # Font style
+        font = ImageFont.truetype("arial.ttf", size=30)  # Font style
         draw = ImageDraw.Draw(tmp_img)
         draw.text((0, 0), f"iter={i}", fill=255, font=font)
         recon_gif.append(tmp_img)
