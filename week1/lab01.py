@@ -22,9 +22,9 @@ class Lab01_op:
 
     def __init__(self):
         # Define TR and TE as a pair in a list [TR, TE]
-        self.PDw_TRTE = [2000, 50]  # Task 2.2
-        self.T1w_TRTE = [300, 50]  # Task 2.3
-        self.T2w_TRTE = [2000,100]  # Task 2.4
+        self.PDw_TRTE = [3000, 30]  # Task 2.2
+        self.T1w_TRTE = [500, 15]  # Task 2.3
+        self.T2w_TRTE = [3000,100]  # Task 2.4
 
     def load_data(self, path="digital_brain_phantom.mat"):
         mat = utils.load_data(path)
@@ -160,4 +160,4 @@ if __name__ == "__main__":
     t2 = op.spin_echo(op.T2w_TRTE[0], op.T2w_TRTE[1])
     t3 = op.spin_echo(op.PDw_TRTE[0], op.PDw_TRTE[1])
 
-    utils.imshow([t3, t1, t2])
+    utils.imshow([ t1, t2, t3])

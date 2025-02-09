@@ -91,11 +91,11 @@ class Lab09_op:
 
         """
         # Your code here ...
+        input_data = data[:,4:9]
+        labels_data = data[:,9]
 
-        input_data = None
-        labels_data = None
+        return input_data, labels_data.astype(int)
 
-        return input_data, labels_data
 
     def ex1_get_nSamples(self, input_data: np.ndarray) -> int:
         """
@@ -110,7 +110,7 @@ class Lab09_op:
         """
         # Your code here ...
 
-        nSamples = None
+        nSamples = np.shape(input_data)[0]
         return nSamples
 
     def ex1_get_nFeatures(self, input_data: np.ndarray) -> int:
@@ -126,7 +126,7 @@ class Lab09_op:
         """
         # Your code here ...
 
-        nFeatures = None
+        nFeatures = np.shape(input_data)[-1]
         return nFeatures
 
     def ex1_get_nLabels(self, labels: np.ndarray) -> int:
@@ -142,8 +142,8 @@ class Lab09_op:
         """
         # Your code here ...
 
-        nLabels = None
-        return nLabels
+        nLabels = np.unique(labels)
+        return np.size(nLabels)
 
     def ex1_normalization(self, train_input: np.ndarray, test_input: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
@@ -161,6 +161,12 @@ class Lab09_op:
 
         # Your code here ...
 
+        train_input_norm = np.zeros_like(train_input)
+        test_input_norm = np.zeros_like(test_input)
+        for i in range(np.shape(train_input)[1]):
+            maxx = np.max(train_input[:,i])
+            train_input_norm[:,i] = train_input[:,i] / maxx
+            test_input_norm[:,i] = test_input[:,i] / maxx
         return train_input_norm, test_input_norm
 
     def ex1_split_train_val(
@@ -184,12 +190,15 @@ class Lab09_op:
         # PLEASE IGNORE HERE AND DO NOT MODIFY THIS PART.
         ex1_get_nSamples = kwargs.get("ex1_get_nSamples", self.ex1_get_nSamples)
 
-        nSamples = None
-        nTrainSamples = None
+        nSamples = ex1_get_nSamples(train_input)
+        nTrainSamples = int(np.ceil(nSamples * train_ratio))
 
         # Split train_input into training and validation sets
         # Your code here ...
-
+        x_train = train_input[0:nTrainSamples]
+        y_train = train_labels[0:nTrainSamples]
+        x_val = train_input[nTrainSamples:-1]
+        y_val = train_labels[nTrainSamples:-1]
         return x_train, y_train, x_val, y_val
 
     def ex1_gen_dataloader(
@@ -217,8 +226,10 @@ class Lab09_op:
             dataloader (DataLoader):    DataLoader for the input and label data
         """
         # Your code here ...
-
-        dataloader = None
+        x = torch.FloatTensor(input_data).to(self.device)
+        y = torch.LongTensor(label_data - 1).to(self.device)
+        dataset = data_utils.TensorDataset(x,y)
+        dataloader = data_utils.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
         return dataloader
 
@@ -243,9 +254,15 @@ class Lab09_op:
         """
         # Your code here ...
 
-        model = None
+        model = nn.Sequential()
+        model.add_module("input_layer",nn.Linear(nFeatures,nHiddenFeatures))
+        model.add_module("ReLU_input", nn.ReLU())
+        for i in range(nLayers):
+            model.add_module("hidden_layer"+str(i+1),nn.Linear(nHiddenFeatures,nHiddenFeatures))
+            model.add_module("ReLU_layer"+str(i+1),nn.ReLU())
+        model.add_module("output_layer",nn.Linear(nHiddenFeatures,nLabels))
+        return model.to(self.device)
 
-        return model
 
     def get_loss(self, loss_type: str = "CrossEntropyLoss") -> Union[nn.CrossEntropyLoss, nn.BCELoss]:
         """
@@ -259,8 +276,9 @@ class Lab09_op:
         """
         # Your code here ...
 
-        loss = None
-
+        loss = nn.CrossEntropyLoss(reduction='mean')
+        if loss_type != "CrossEntropyLoss":
+            loss = nn.BCELoss(reduction='mean')
         return loss
 
     def get_optimizer(self, model: nn.Sequential, lr: float = 0.001) -> torch.optim.Adam:
@@ -276,9 +294,7 @@ class Lab09_op:
         """
 
         # Your code here ...
-
-        optimizer = None
-
+        optimizer = torch.optim.Adam(model.parameters(),lr=lr)
         return optimizer
 
     def compute_accuracy(self, output: torch.Tensor, labels: torch.Tensor) -> float:
@@ -304,10 +320,17 @@ class Lab09_op:
 
         """
         # Your code here ...
+        if output.dim() > 1:  
+            predictions = torch.argmax(output, dim=1) 
+            
+        else:  
+            predictions = torch.round(output)  
 
-        accuracy = None
+        correct_predictions = (predictions == labels).sum().item()  
+        total_samples = labels.size(0)  
 
-        return accuracy
+        accuracy = correct_predictions / total_samples
+        return float(accuracy)
 
     def trainer(
         self,
@@ -352,44 +375,58 @@ class Lab09_op:
                 running_acc = 0
 
                 # Set the model to train mode (*)
+                model.train()
 
                 for local_batch, local_labels in dataloader_train:
                     # Input local_batch to the model and get the output (*)
-
+                    c_out = model(local_batch)
+    
                     # Compuate the loss (*)
+                    c_loss = criterion(c_out, local_labels)
+        
 
                     # feedforward - backpropagation (*)
                     ## 1. initialize gradients to zero (zero_grad())
+                    optimizer.zero_grad()
+                    c_loss.backward()
+                    optimizer.step()
                     ## 2. Backpropagation (backward())
                     ## 3. Update parameters (step())
 
                     # Accumulate the loss and accuracy (*)
-                    running_loss += None
-                    running_acc += None
+                    running_loss += c_loss ###* len(local_labels)
+                    running_acc += compute_accuracy(c_out, local_labels) ####* len(local_labels)
 
                 # Average loss and accuracy (*)
-                loss_train[epoch] = None
-                acc_train[epoch] = None
+                a = len(dataloader_train)  ######################.dataset
+                loss_train[epoch] = running_loss / a
+                acc_train[epoch] = running_acc / a
 
                 # Validation
                 running_loss = 0.0
                 running_acc = 0
 
                 # Set the model to evaluation mode (*)
+                model.eval()
 
                 with torch.no_grad():
                     for local_batch, local_labels in dataloader_val:
                         # Input local_batch to the model and get the output (*)
-
+                        c_out = model(local_batch)
+                        
                         # Compute the loss (*)
-
+                        c_loss = criterion(c_out, local_labels)
+                        
+                        
                         # Accumulate the loss and accuracy (*)
-                        running_loss += None
-                        running_acc += None
+                        running_loss += c_loss ###########* len(local_labels)
+                        running_acc += compute_accuracy(c_out, local_labels) ########* len(local_labels) 
 
                 # Average loss and accuracy (*)
-                loss_val[epoch] = None
-                acc_val[epoch] = None
+                b = len(dataloader_val)  ####################.dataset
+                loss_val[epoch] = running_loss / b
+                acc_val[epoch] = running_acc / b
+
 
                 # Update progress bar
                 pbar.set_description(desc=f"Epoch {epoch: 3d}")
@@ -423,16 +460,19 @@ class Lab09_op:
         running_acc = 0
 
         # Set the model to evaluation mode (*)
+        model.eval()
 
         with torch.no_grad():
             for local_batch, local_labels in dataloader:
                 # Input local_batch to the model and get the output (*)
+                c_out = model(local_batch)
 
                 # Compute the accuracy (*)
-                running_acc += None
+                running_acc += compute_accuracy(c_out, local_labels) #### * len(local_labels)
 
-        # Average accuracy
-        accuracy = None
+        # Average accuracy        
+        b = len(dataloader)  ######.dataset
+        accuracy = running_acc / b
         return accuracy
 
     def ex2_gen_dataloader(
@@ -461,11 +501,11 @@ class Lab09_op:
         """
 
         # Your code here ...
-
-        dataloader = None
-
+        x = torch.FloatTensor(input_data).to(self.device)
+        y = torch.FloatTensor(label_data).to(self.device)
+        dataset = data_utils.TensorDataset(x,y)
+        dataloader = data_utils.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
         return dataloader
-
 
 class ex2_CNN5layers_FC(nn.Module):
     """
@@ -477,6 +517,28 @@ class ex2_CNN5layers_FC(nn.Module):
 
         # Initialize the layers
         # Your code here ...
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(1, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU())
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.layer5 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.flat = nn.Sequential(nn.Flatten())
+        self.fc1 = nn.Sequential(nn.Linear(1600,16))
+        self.fc2 = nn.Sequential(nn.Linear(16,1), nn.Sigmoid())
 
     def forward(self, x):
         """
@@ -489,8 +551,15 @@ class ex2_CNN5layers_FC(nn.Module):
             x (torch.Tensor): Output tensor [Batch]
         """
         # Your code here ...
-
-        x = None
+        out = self.layer1(x)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.layer5(out)
+        out = self.flat(out)
+        out = self.fc1(out)
+        out = self.fc2(out)
+        x = torch.squeeze(out, dim=1)
         return x
 
 
@@ -504,6 +573,11 @@ class ex2_CNN1layer_global_avg(nn.Module):
 
         # Initialize the layers
         # Your code here ...
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(1, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU())
+        
+        self.fc = nn.Sequential(nn.Linear(4,1), nn.Sigmoid())
 
     def forward(self, x):
         """
@@ -516,8 +590,11 @@ class ex2_CNN1layer_global_avg(nn.Module):
             x (torch.Tensor): Output tensor [Batch]
         """
         # Your code here ...
-
-        x = None
+        out = self.layer1(x)
+        out = torch.mean(out,dim=(2,3))
+        out = self.fc(out)
+        x = torch.squeeze(out, dim=1)
+        return x
 
 
 class ex2_CNN5layers_global_avg(nn.Module):
@@ -530,6 +607,27 @@ class ex2_CNN5layers_global_avg(nn.Module):
 
         # Initialize the layers
         # Your code here ...
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(1, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU())
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        self.layer5 = nn.Sequential(
+            nn.Conv2d(4, 4, kernel_size = 3, stride=1, padding=1, ),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+        
+        self.fc = nn.Sequential(nn.Linear(4,1), nn.Sigmoid())
 
     def forward(self, x):
         """
@@ -542,13 +640,131 @@ class ex2_CNN5layers_global_avg(nn.Module):
             x (torch.Tensor): Output tensor [Batch]
         """
         # Your code here ...
-
-        x = None
+        out = self.layer1(x)
+        out = self.layer2(out)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        out = self.layer5(out)
+        out = torch.mean(out,dim=(2,3))
+        out = self.fc(out)
+        x = torch.squeeze(out, dim=1)
+        return x
 
 
 if __name__ == "__main__":
     # %% Load modules
     # This import is necessary to run the code cell-by-cell
     from lab09 import *
-
+    
     op = Lab09_op()
+#     train_data, test_data = op.load_data_ex1()
+    
+#     train_data_input, train_data_label = op.ex1_extract_features(train_data)
+#     test_input, test_label = op.ex1_extract_features(test_data)
+    
+#     train_data_input, test_input = op.ex1_normalization(train_data_input, test_input)
+    
+#     train_input, train_label, val_input, val_label = op.ex1_split_train_val(train_data_input, train_data_label)
+    
+#     dataloader_train = op.ex1_gen_dataloader(train_input, train_label)
+#     dataloader_val = op.ex1_gen_dataloader(val_input, val_label, shuffle=False)
+#     dataloader_test = op.ex1_gen_dataloader(test_input, test_label, shuffle=False)
+    
+#     nFeatures = op.ex1_get_nFeatures(train_data_input)
+#     nLabels = op.ex1_get_nLabels(train_data_label)
+#     nHiddenFeatures = 100
+#     nLayers = 3
+#     model = op.ex1_build_model(nFeatures, nLabels, nHiddenFeatures, nLayers)
+    
+#     criterion = op.get_loss(loss_type="CrossEntropyLoss")
+#     optim = op.get_optimizer(model, 0.001)
+    
+#     loss_train, acc_train, loss_val, acc_val = op.trainer(model, criterion, optim, dataloader_train, dataloader_val, 100)
+#     utils.plot([loss_train, loss_val], ["train", "val"], xlabel="epoch", ylabel="Loss", title="Loss")
+#     utils.plot([acc_train, acc_val], ["train", "val"], xlabel="epoch", ylabel="accuracy", title="Accuracy")
+#     accuracy = op.ex1_tester(model, dataloader_test)
+#     print(f"Accuracy for test data: {accuracy*100:.2f}%")
+
+    x_train, y_train, x_val, y_val = op.load_data_ex2()
+    dataloader_train = op.ex2_gen_dataloader(x_train, y_train, batch_size=10)
+    dataloader_val = op.ex2_gen_dataloader(x_val, y_val, batch_size=10, shuffle=False)
+    
+    criterion = op.get_loss("BCELoss")
+    lr = 0.001
+    epochs = 300
+    
+#     model = ex2_CNN5layers_FC().to(op.device)
+#     print(model)
+#     optimizer = op.get_optimizer(model, lr)
+
+#     loss_train_231, acc_train_231, loss_val_231, acc_val_231 = op.trainer(
+#         model, criterion, optimizer, dataloader_train, dataloader_val, epochs
+#     )
+#     plot_label_train_val = f"CNN5layers+Fully-connected layer: train/val={acc_train_231[-1]:.2}/{acc_val_231[-1]:.2}"
+
+#     utils.plot(
+#         [loss_train_231, loss_val_231],
+#         labels=["training", "validation"],
+#         title=plot_label_train_val,
+#         xlabel="epoch",
+#         ylabel="Loss",
+#         smoothing=10,
+#     )
+#     utils.plot(
+#         [acc_train_231, acc_val_231],
+#         labels=["training", "validation"],
+#         title=plot_label_train_val,
+#         xlabel="epoch",
+#         ylabel="Accuracy",
+#         smoothing=10,
+#     )
+    
+#     model = ex2_CNN1layer_global_avg().to(op.device)
+#     optimizer = op.get_optimizer(model, lr)
+
+#     loss_train_232, acc_train_232, loss_val_232, acc_val_232 = op.trainer(
+#         model, criterion, optimizer, dataloader_train, dataloader_val, epochs
+#     )
+#     plot_label_train_val = f"CNN1layer_global_avg layer: train/val={acc_train_232[-1]:.2}/{acc_val_232[-1]:.2}"
+
+#     utils.plot(
+#         [loss_train_232, loss_val_232],
+#         labels=["training", "validation"],
+#         title=plot_label_train_val,
+#         xlabel="epoch",
+#         ylabel="Loss",
+#         smoothing=10,
+#     )
+#     utils.plot(
+#         [acc_train_232, acc_val_232],
+#         labels=["training", "validation"],
+#         title=plot_label_train_val,
+#         xlabel="epoch",
+#         ylabel="Accuracy",
+#         smoothing=10,
+#     )
+    
+    model = ex2_CNN5layers_global_avg().to(op.device)
+    optimizer = op.get_optimizer(model, lr)
+
+    loss_train_233, acc_train_233, loss_val_233, acc_val_233 = op.trainer(
+        model, criterion, optimizer, dataloader_train, dataloader_val, epochs
+    )
+    plot_label_train_val = f"CNN5layers_global_avg layer: train/val={acc_train_233[-1]:.2}/{acc_val_233[-1]:.2}"
+
+    utils.plot(
+        [loss_train_233, loss_val_233],
+        labels=["training", "validation"],
+        title=plot_label_train_val,
+        xlabel="epoch",
+        ylabel="Loss",
+        smoothing=10,
+    )
+    utils.plot(
+        [acc_train_233, acc_val_233],
+        labels=["training", "validation"],
+        title=plot_label_train_val,
+        xlabel="epoch",
+        ylabel="Accuracy",
+        smoothing=10,
+    )

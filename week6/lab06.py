@@ -443,7 +443,7 @@ if __name__ == "__main__":
     kernel_size = (2,3)
     R = 2
     acs = op.get_acs(kdata,nACS)
-    nacs = 24
+    nacs = 96
 
     ground_truth = utils.ls_comb(utils.ifft2c(kdata, axes=(0, 1)), sens_maps, psi)
     for kernel_size in [(2, 3), (4, 5), (6, 7)]:
